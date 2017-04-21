@@ -1,0 +1,111 @@
+---
+title: "Exploratory and Predictive Analysis of Atlanta Test Scores"
+author: "Christiano Hernandez and Margaret Erlandson"
+date: "March 27, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Atlanta Districts/Counties with Demographics and Test Scores
+
+Aggregate data for the Atlanta public school districts and surrounding counties were pooled from .... 
+
+Fields included Total population of the county or district, numbers of male and female, total numbers of black, white, hispanic, asian, and other minorities, adjusted annual gross income (AGI), numbers of people with bachelor or graduate degrees, total numbers of kids tested for English, Math, Science, and Social Studies along with those numbers broken into sections for Beginner, Developing, Proficient, and Distinguished.
+
+Libraries used in this analysis were dplyr, readr, reshape2, ggplot2, caret. Initial setup also included reworking column names and deleting miscellaneous columns. We added columns for the percent of black, white, hispanic, and asian populations for later comparison. We also melted the dataset for beginner, developing, proficient, and distinguished learner numbers for use in later plots.
+
+```{r library, echo=FALSE, message=FALSE, warning=FALSE}
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(caret)
+library(reshape2)
+```
+
+```{r loading, message=FALSE, warning=FALSE, cache=TRUE}
+atlanta <- read_csv("~/atlanta.csv")
+atlanta <- atlanta[1:85, 2:48]
+newNamesAtlanta <- c("County", "School", "Zip", "TotalPop", "Male", "Female", "MedianAge", "TotalPop1", "Hispanic", "White", "Black", "AmericanIndian", "Asian", "Pacific", "Other", "TwoOrMore", "TotalHousingUnits", "CitizenAge", "Citizen18Over", "Male1", "Female1", "PopDensity", "BachorHigher", "GradorProf", "Unemployed", "Married", "AGI", "ELATested", "ELABeginner", "ELADeveloping", "ELAProficient", "ELADistinguished", "MATHTested", "MATHBeginner", "MATHDeveloping", "MATHProficient", "MATHDistinguished", "SCITested", "SCIBeginner", "SCIDeveloping", "SCIProficient", "SCIDistinguished", "SSTested", "SSBeginner", "SSDeveloping", "SSProficient", "SSDistinguished")
+colnames(atlanta) <- newNamesAtlanta
+```
+
+```{r cleaning}
+atlanta$PercentBlack <- atlanta$Black/atlanta$TotalPop
+atlanta$PercentWhite <- atlanta$White/atlanta$TotalPop
+atlanta$PercentHispanic <- atlanta$Hispanic/atlanta$TotalPop
+atlanta$PercentAsian <- atlanta$Asian/atlanta$TotalPop
+atlantaMeltMath <- melt(atlanta, id.vars = c("BachorHigher"), measure.vars = c("MATHDistinguished", "MATHProficient", "MATHDeveloping", "MATHBeginner"))
+atlantaMeltBlack <- melt(atlanta, id.vars = c("PercentBlack"), measure.vars = c("MATHDistinguished", "MATHProficient", "MATHDeveloping", "MATHBeginner"))
+atlantaMeltBlack$PercentBlack <- atlantaMeltBlack$PercentBlack * 100
+```
+
+## Exploratory Analysis
+
+First looks were done on various two-variable plots, just seeing what relationships would show up. We think there may relationships between income, race, bachelor or graduate degrees, population densities, and overall test scores.
+
+```{r explore1}
+ggplot(atlanta, aes(BachorHigher, AGI)) + geom_point() + geom_smooth(method="lm")
+ggplot(atlanta, aes(GradorProf, AGI)) + geom_point() + geom_smooth(method="lm")
+```
+
+Both of these plots look very similar to the income, so maybe there's a direct relationship between them, as shown in the next plot.
+
+```{r explore2}
+ggplot(atlanta, aes(BachorHigher, GradorProf)) + geom_point() + geom_smooth(method="lm")
+```
+
+So, yes, there's a direct link between numbers of the population that have bachelor degrees and numbers that have graduate or higher degrees. We suspect that this might also have a direct relationship with distinguished test scores. Let's also add income to the display as the size of each bubble.
+
+```{r explore3}
+ggplot(atlanta) + geom_point(aes(BachorHigher, MATHDistinguished, size=AGI), col = "blue") + geom_point(aes(BachorHigher, ELADistinguished, size=AGI), col = "yellow") + geom_point(aes(BachorHigher, SCIDistinguished, size=AGI), col = "red") + geom_point(aes(BachorHigher, SSDistinguished, size=AGI), col = "green") + labs(title="Bachelor Degree and Numbers of Distinguished Learners", x="Bachelor Degrees", y="Distinguished Learners")
+```
+
+It does appear to have higher correlation between bachelor degrees and outputs of distinguished learners. Could the opposite be true as well? Let's look at beginning scores.
+
+```{r explore4}
+ggplot(atlanta) + geom_point(aes(BachorHigher, MATHBeginner, size=AGI), col = "blue") + geom_point(aes(BachorHigher, ELABeginner, size=AGI), col = "yellow") + geom_point(aes(BachorHigher, SCIBeginner, size=AGI), col = "red") + geom_point(aes(BachorHigher, SSBeginner, size=AGI), col = "green") + labs(title="Bachelor Degree and Numbers of Beginner Learners", x="Bachelor Degrees", y="Beginner Learners")
+```
+
+No, that's not more direct, and realisitcally, you are going to have equal numbers of beginning learners spread out over all the areas and levels. To see this better, we'll change to a stacked bar graph, focusing in on MATH test scores.
+
+```{r stackedbar}
+ggplot(atlantaMeltMath) + geom_bar(aes(BachorHigher, value, fill=variable), position = "fill", stat="identity", width=1.5) + labs(title="Bachelor Degree and Numbers of MATH Learners", x="Bachelor Degrees per School Zone", y="Percentage of MATH Learners")
+```
+
+We do want to look at how race may affect test scores.
+
+```{r race1}
+ggplot(atlanta) + geom_point(aes(PercentBlack, MATHDistinguished, size=AGI), col = "blue") + geom_point(aes(PercentBlack, ELADistinguished, size=AGI), col = "yellow") + geom_point(aes(PercentBlack, SCIDistinguished, size=AGI), col = "red") + geom_point(aes(PercentBlack, SSDistinguished, size=AGI), col = "green") + labs(title="Percent Black in Community and Numbers of Distinguished Learners", x="Percent Black", y="Distinguished Learners")
+ggplot(atlanta) + geom_point(aes(PercentWhite, MATHDistinguished, size=AGI), col = "blue") + geom_point(aes(PercentWhite, ELADistinguished, size=AGI), col = "yellow") + geom_point(aes(PercentWhite, SCIDistinguished, size=AGI), col = "red") + geom_point(aes(PercentWhite, SSDistinguished, size=AGI), col = "green") + labs(title="Percent White in Community and Numbers of Distinguished Learners", x="Percent White", y="Distinguished Learners")
+ggplot(atlanta) + geom_point(aes(PercentHispanic, MATHDistinguished, size=AGI), col = "blue") + geom_point(aes(PercentHispanic, ELADistinguished, size=AGI), col = "yellow") + geom_point(aes(PercentHispanic, SCIDistinguished, size=AGI), col = "red") + geom_point(aes(PercentHispanic, SSDistinguished, size=AGI), col = "green") + labs(title="Percent Hispanic in Community and Numbers of Distinguished Learners", x="Percent Hispanic", y="Distinguished Learners")
+ggplot(atlanta) + geom_point(aes(PercentAsian, MATHDistinguished, size=AGI), col = "blue") + geom_point(aes(PercentAsian, ELADistinguished, size=AGI), col = "yellow") + geom_point(aes(PercentAsian, SCIDistinguished, size=AGI), col = "red") + geom_point(aes(PercentAsian, SSDistinguished, size=AGI), col = "green") + labs(title="Percent Asian in Community and Numbers of Distinguished Learners", x="Percent Asian", y="Distinguished Learners")
+```
+
+We can see that there is a disadvantage in the Black and Hispanic populations and an advantage in the White populations in regards to numbers of Distinguished Learners.
+
+We can also repeat our previous bar chart with the percentages stacked together.
+
+```{r blackbar}
+ggplot(atlantaMeltBlack) + geom_bar(aes(PercentBlack, value, fill=variable), position = "fill", stat="identity", width=1.5) + labs(title="Blacks in Community and Numbers of MATH Learners", x="Number of Blacks per School Zone", y="Percentage of MATH Learners")
+```
+
+## Clustering
+
+So now we want to set up some clusters to look at racial and income effects. Let's group the number of blacks in quantiles.
+
+```{r cluster1}
+atlanta$ClusterBlack <- 0L
+for (i in 1:nrow(atlanta)) {if(atlanta$PercentBlack[i] >= .25 & atlanta$PercentBlack[i] < .5) {atlanta$ClusterBlack[i] <- 25L} else if(atlanta$PercentBlack[i] >= .5 & atlanta$PercentBlack[i] < .75) {atlanta$ClusterBlack[i] <- 50L} else if(atlanta$PercentBlack[i] >= .75) {atlanta$ClusterBlack[i] <- 75L}}
+atlanta$ClusterBlack <- as.factor(atlanta$ClusterBlack)
+ggplot(atlanta, aes(AGI, MATHDistinguished, col = Married)) + geom_point() + facet_grid(ClusterBlack~.)
+```
+
+```{r cluster2}
+atlanta$ClusterWhite <- 0L
+for (i in 1:nrow(atlanta)) {if(atlanta$PercentWhite[i] >= .25 & atlanta$PercentWhite[i] < .5) {atlanta$ClusterWhite[i] <- 25L} else if(atlanta$PercentWhite[i] >= .5 & atlanta$PercentWhite[i] < .75) {atlanta$ClusterWhite[i] <- 50L} else if(atlanta$PercentWhite[i] >= .75) {atlanta$ClusterWhite[i] <- 75L}}
+atlanta$ClusterWhite <- as.factor(atlanta$ClusterWhite)
+ggplot(atlanta, aes(AGI, MATHDistinguished, col = Married)) + geom_point() + facet_grid(ClusterWhite~.)
+```
